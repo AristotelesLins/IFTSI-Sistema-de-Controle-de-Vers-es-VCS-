@@ -26,10 +26,11 @@ class Node:
         name (str): Nome do arquivo ou diretório
         is_file (bool): True se é um arquivo, False se é um diretório
         content_hash (str): Hash SHA-1 do conteúdo (apenas para arquivos)
+        file_size (int): Tamanho do arquivo em bytes (apenas para arquivos)
         children (dict): Dicionário de nós filhos {nome: Node}
     """
     
-    def __init__(self, name, is_file=False, content_hash=None):
+    def __init__(self, name, is_file=False, content_hash=None, file_size=0):
         """
         Inicializa um novo nó.
         
@@ -37,10 +38,12 @@ class Node:
             name (str): Nome do arquivo ou diretório
             is_file (bool): True se é um arquivo, False se é um diretório
             content_hash (str, optional): Hash do conteúdo para arquivos
+            file_size (int): Tamanho do arquivo em bytes (apenas para arquivos)
         """
         self.name = name
         self.is_file = is_file
         self.content_hash = content_hash
+        self.file_size = file_size if is_file else 0
         self.children = {}  # Dicionário para estrutura N-ária
     
     def add_child(self, child_node):
@@ -96,6 +99,38 @@ class Node:
             int: Número de nós filhos
         """
         return len(self.children)
+    
+    def get_file_info(self):
+        """
+        Retorna informações detalhadas do arquivo.
+        
+        Returns:
+            dict: Dicionário com informações do arquivo
+        """
+        return {
+            'name': self.name,
+            'is_file': self.is_file,
+            'size': self.file_size,
+            'hash': self.content_hash,
+            'children_count': len(self.children)
+        }
+    
+    def format_file_size(self):
+        """
+        Formata o tamanho do arquivo para exibição.
+        
+        Returns:
+            str: Tamanho formatado (ex: "1.2 KB", "3.4 MB")
+        """
+        if not self.is_file:
+            return "N/A"
+        
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
     
     def __str__(self):
         """

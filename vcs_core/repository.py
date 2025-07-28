@@ -162,21 +162,22 @@ class Repository:
                     with open(file_path, "rb") as f:
                         content = f.read()
                     
-                    # Calcula o hash do conteúdo
+                    # Calcula o hash do conteúdo e obter tamanho
                     content_hash = self._calculate_hash(content)
+                    file_size = len(content)
                     
                     # Salva o objeto se não existe
                     object_path = os.path.join(self.objects_dir, content_hash)
                     if not os.path.exists(object_path):
                         with open(object_path, "wb") as obj_f:
                             obj_f.write(content)
-                        print(f"Novo objeto salvo: {content_hash[:7]} para {file_name}")
+                        print(f"Novo objeto salvo: {content_hash[:7]} para {file_name} ({file_size} bytes)")
                     else:
-                        print(f"Objeto já existe: {content_hash[:7]} para {file_name}")
+                        print(f"Objeto já existe: {content_hash[:7]} para {file_name} ({file_size} bytes)")
                     
                     # Adiciona à árvore do commit
                     relative_path = os.path.relpath(file_path, self.work_dir)
-                    new_commit.file_tree.insert(relative_path, content_hash)
+                    new_commit.file_tree.insert(relative_path, content_hash, file_size)
                     files_found += 1
                     print(f"Arquivo adicionado à árvore: {relative_path}")
                 
@@ -359,4 +360,109 @@ class Repository:
             'head_hash': head_hash,
             'head_commit_message': head_commit.message if head_commit else None,
             'total_commits': len(history)
+        }
+    
+    def get_file_history(self, file_path):
+        """
+        Obtém o histórico de versões de um arquivo específico.
+        
+        Args:
+            file_path (str): Caminho relativo do arquivo
+            
+        Returns:
+            list: Lista de tuplas (commit_hash, commit_obj, node) onde o arquivo existe
+        """
+        if not self.is_repository():
+            return []
+
+        file_history = []
+        history = self.get_history()
+        
+        for commit_hash, commit_obj in history:
+            # Busca o arquivo na árvore do commit
+            node = commit_obj.file_tree.find_node(file_path)
+            if node and node.is_file:
+                file_history.append((commit_hash, commit_obj, node))
+        
+        return file_history
+    
+    def get_all_files_in_commit(self, commit_hash):
+        """
+        Obtém todos os arquivos em um commit específico.
+        
+        Args:
+            commit_hash (str): Hash do commit
+            
+        Returns:
+            list: Lista de tuplas (caminho, hash_conteudo)
+        """
+        commit_obj = self.get_commit(commit_hash)
+        if not commit_obj:
+            return []
+        
+        return commit_obj.file_tree.get_all_files()
+    
+    def remove_file_from_repository(self, file_path):
+        """
+        Remove um arquivo do repositório (marca para remoção no próximo commit).
+        
+        Args:
+            file_path (str): Caminho do arquivo a ser removido
+        """
+        full_path = os.path.join(self.work_dir, file_path)
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+                print(f"Arquivo {file_path} removido do diretório de trabalho")
+            except OSError as e:
+                print(f"Erro ao remover arquivo {file_path}: {e}")
+        else:
+            print(f"Arquivo {file_path} não encontrado no diretório de trabalho")
+    
+    def compare_commits(self, commit_hash1, commit_hash2):
+        """
+        Compara dois commits e retorna as diferenças.
+        
+        Args:
+            commit_hash1 (str): Hash do primeiro commit
+            commit_hash2 (str): Hash do segundo commit
+            
+        Returns:
+            dict: Dicionário com arquivos adicionados, removidos e modificados
+        """
+        commit1 = self.get_commit(commit_hash1)
+        commit2 = self.get_commit(commit_hash2)
+        
+        if not commit1 or not commit2:
+            return {'error': 'Um ou ambos commits não encontrados'}
+        
+        files1 = {path: hash_val for path, hash_val in commit1.file_tree.get_all_files()}
+        files2 = {path: hash_val for path, hash_val in commit2.file_tree.get_all_files()}
+        
+        added = []      # Arquivos em commit2 mas não em commit1
+        removed = []    # Arquivos em commit1 mas não em commit2
+        modified = []   # Arquivos em ambos mas com hash diferente
+        unchanged = []  # Arquivos idênticos
+        
+        # Arquivos adicionados
+        for path in files2:
+            if path not in files1:
+                added.append(path)
+        
+        # Arquivos removidos e modificados
+        for path in files1:
+            if path not in files2:
+                removed.append(path)
+            elif files1[path] != files2[path]:
+                modified.append((path, files1[path], files2[path]))
+            else:
+                unchanged.append(path)
+        
+        return {
+            'added': added,
+            'removed': removed,
+            'modified': modified,
+            'unchanged': unchanged,
+            'commit1_info': f"{commit_hash1[:10]} - {commit1.message}",
+            'commit2_info': f"{commit_hash2[:10]} - {commit2.message}"
         }

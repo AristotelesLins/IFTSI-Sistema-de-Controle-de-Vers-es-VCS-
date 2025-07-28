@@ -37,7 +37,7 @@ class FileTree:
         """
         self.root = Node("/", is_file=False)
     
-    def insert(self, path, content_hash=None):
+    def insert(self, path, content_hash=None, file_size=0):
         """
         Insere um caminho na árvore de arquivos.
         
@@ -48,6 +48,7 @@ class FileTree:
         Args:
             path (str): Caminho do arquivo/diretório a ser inserido
             content_hash (str, optional): Hash do conteúdo para arquivos
+            file_size (int): Tamanho do arquivo em bytes
         """
         if not path or path == "/":
             return
@@ -67,7 +68,7 @@ class FileTree:
             if not current_node.has_child(part):
                 # Determina se é arquivo ou diretório
                 is_file = is_last_part and content_hash is not None
-                new_node = Node(part, is_file=is_file, content_hash=content_hash if is_file else None)
+                new_node = Node(part, is_file=is_file, content_hash=content_hash if is_file else None, file_size=file_size if is_file else 0)
                 current_node.add_child(new_node)
             
             # Move para o próximo nó
@@ -77,6 +78,7 @@ class FileTree:
             if is_last_part and content_hash is not None:
                 current_node.is_file = True
                 current_node.content_hash = content_hash
+                current_node.file_size = file_size
     
     def find_node(self, path):
         """
@@ -103,10 +105,10 @@ class FileTree:
     
     def get_all_files(self):
         """
-        Retorna todos os arquivos da árvore com seus caminhos.
+        Retorna todos os arquivos da árvore com seus caminhos e nós.
         
         Returns:
-            list: Lista de tuplas (caminho, content_hash)
+            list: Lista de tuplas (caminho, node)
         """
         files = []
         self._collect_files(self.root, "", files)
@@ -125,7 +127,7 @@ class FileTree:
             child_path = os.path.join(current_path, child_name) if current_path else child_name
             
             if child_node.is_file:
-                files.append((child_path, child_node.content_hash))
+                files.append((child_path, child_node))
             else:
                 self._collect_files(child_node, child_path, files)
     
@@ -181,3 +183,69 @@ class FileTree:
         
         structure = self.get_directory_structure()
         return f"FileTree:\n" + "\n".join(structure)
+    
+    def find_node(self, path):
+        """
+        Encontra um nó específico pelo caminho.
+        
+        Args:
+            path (str): Caminho do arquivo/diretório
+            
+        Returns:
+            Node ou None: O nó encontrado ou None se não existir
+        """
+        if not path or path == ".":
+            return self.root
+        
+        # Normalizar o caminho
+        path = path.replace('\\', '/')
+        parts = [p for p in path.split('/') if p]
+        
+        current_node = self.root
+        for part in parts:
+            if part in current_node.children:
+                current_node = current_node.children[part]
+            else:
+                return None
+        
+        return current_node
+    
+    def get_tree_visualization(self, node=None, prefix="", is_last=True):
+        """
+        Retorna uma visualização em árvore ASCII.
+        
+        Args:
+            node (Node): Nó inicial (padrão: root)
+            prefix (str): Prefixo para indentação
+            is_last (bool): Se é o último filho
+            
+        Returns:
+            str: Visualização em ASCII
+        """
+        if node is None:
+            node = self.root
+        
+        result = ""
+        connector = "└── " if is_last else "├── "
+        icon = "📄 " if node.is_file else "📁 "
+        
+        if node != self.root:
+            result += prefix + connector + icon + node.name + "\n"
+        
+        children = list(node.children.items())
+        for i, (child_name, child_node) in enumerate(children):
+            is_child_last = (i == len(children) - 1)
+            extension = "    " if is_last else "│   "
+            result += self.get_tree_visualization(
+                child_node, 
+                prefix + extension, 
+                is_child_last
+            )
+        
+        return result
+    
+    def print_tree(self):
+        """
+        Imprime a árvore de arquivos de forma visual.
+        """
+        print(self.get_tree_visualization(self.root))
